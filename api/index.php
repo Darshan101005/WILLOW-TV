@@ -1,10 +1,22 @@
 <?php
-// Get URL from query parameter
-$url = isset($_GET['url']) ? urldecode($_GET['url']) : '';
-
-if (empty($url) || !filter_var($url, FILTER_VALIDATE_URL)) {
+// Get URL from either PATH_INFO or query parameter
+if (isset($_SERVER['PATH_INFO']) && strlen($_SERVER['PATH_INFO']) > 1) {
+    $url = ltrim($_SERVER['PATH_INFO'], '/');
+    // Add protocol if missing
+    if (strpos($url, 'http') !== 0) {
+        $url = 'https://' . $url;
+    }
+} elseif (isset($_GET['url'])) {
+    $url = urldecode($_GET['url']);
+} else {
     header('HTTP/1.1 400 Bad Request');
-    die('Invalid URL - Usage: /api?url=[encoded_stream_url]');
+    die('Invalid URL - Use /api/http://example.com/stream.m3u8 or /api?url=http://example.com/stream.m3u8');
+}
+
+// Validate URL
+if (!filter_var($url, FILTER_VALIDATE_URL)) {
+    header('HTTP/1.1 400 Bad Request');
+    die('Malformed URL');
 }
 
 // Configure request
@@ -21,15 +33,16 @@ $options = [
     ]
 ];
 
+// Fetch content
 $context = stream_context_create($options);
 $response = @file_get_contents($url, false, $context);
 
 if ($response === false) {
     header('HTTP/1.1 502 Bad Gateway');
-    die('Failed to fetch stream');
+    die('Upstream request failed');
 }
 
-// Forward content type
+// Forward content-type
 foreach ($http_response_header as $header) {
     if (preg_match('/^content-type:/i', $header)) {
         header($header);
@@ -41,16 +54,16 @@ foreach ($http_response_header as $header) {
 if (strpos($header, 'application/vnd.apple.mpegurl') !== false || 
     strpos($header, 'application/x-mpegURL') !== false) {
     
-    $proxyBase = 'https://'.$_SERVER['HTTP_HOST'].'/api?url=';
+    $proxyBase = 'https://'.$_SERVER['HTTP_HOST'].'/api/';
     $lines = explode("\n", $response);
     
     foreach ($lines as &$line) {
         if (strpos($line, 'http') === 0) {
-            $line = $proxyBase . urlencode($line);
+            $line = $proxyBase . $line;
         }
         elseif (!empty($line) && $line[0] !== '#' && strpos($line, '://') === false) {
             $absoluteUrl = dirname($url) . '/' . $line;
-            $line = $proxyBase . urlencode($absoluteUrl);
+            $line = $proxyBase . $absoluteUrl;
         }
     }
     
