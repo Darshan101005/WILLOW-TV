@@ -8,8 +8,12 @@
   ],
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api/index.php?url=$1"
+      "source": "/api/(?<url>.+)",
+      "destination": "/api/index.php/$url"
+    },
+    {
+      "source": "/api",
+      "destination": "/api/index.php"
     }
   ],
   "headers": [
@@ -19,10 +23,6 @@
         {
           "key": "Access-Control-Allow-Origin",
           "value": "*"
-        },
-        {
-          "key": "Access-Control-Allow-Methods",
-          "value": "GET"
         }
       ]
     }
